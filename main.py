@@ -134,6 +134,7 @@ class Face_Recognition:
         # Exit Button
         img11 = Image.open(r"C:\Face Recognition Attendence System\college_images\exit.jpg")
         img11 = img11.resize((220, 220), Image.Resampling.LANCZOS)
+        
         self.photoimg11 = ImageTk.PhotoImage(img11)
 
         b8 = Button(bg_img, image=self.photoimg11, cursor="hand2")
