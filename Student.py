@@ -1,731 +1,694 @@
 from tkinter import *
 from tkinter import ttk
-from PIL import Image, ImageTk
 from tkinter import messagebox
 import mysql.connector
 import cv2
+import math
+import time
+
+
+# ─────────────────────────────────────────────
+#  COLOUR PALETTE  (deep-space tech aesthetic)
+# ─────────────────────────────────────────────
+BG_DARK       = "#0A0E1A"   # near-black deep navy
+BG_CARD       = "#111827"   # card background
+BG_SURFACE    = "#1A2235"   # slightly lighter surface
+ACCENT_CYAN   = "#00D4FF"   # electric cyan
+ACCENT_TEAL   = "#00F5C4"   # mint-teal glow
+ACCENT_PURPLE = "#7C3AED"   # vivid purple for highlights
+TEXT_PRIMARY  = "#F0F4FF"   # bright white-blue
+TEXT_SECONDARY= "#8B9DC3"   # muted steel blue
+TEXT_DIM      = "#4B5E82"   # dim labels
+BORDER_GLOW   = "#1E3A5F"   # subtle border
+INPUT_BG      = "#0D1526"   # input field bg
+BTN_SAVE      = "#00D4FF"
+BTN_UPDATE    = "#7C3AED"
+BTN_DELETE    = "#FF4757"
+BTN_RESET     = "#00F5C4"
+SUCCESS_GREEN = "#00F5C4"
+ERROR_RED     = "#FF4757"
+
+# ─────────────────────────────────────────────
+#  FONTS
+# ─────────────────────────────────────────────
+FONT_TITLE  = ("Courier New", 26, "bold")
+FONT_SECTION= ("Courier New", 11, "bold")
+FONT_LABEL  = ("Consolas", 10, "bold")
+FONT_INPUT  = ("Consolas", 10)
+FONT_BTN    = ("Courier New", 10, "bold")
+FONT_HEAD   = ("Courier New", 9, "bold")
+
+
+def apply_global_style():
+    """Apply ttk styles globally."""
+    style = ttk.Style()
+    style.theme_use("clam")
+
+    # ── Combobox ──
+    style.configure("Tech.TCombobox",
+        fieldbackground=INPUT_BG,
+        background=INPUT_BG,
+        foreground=ACCENT_CYAN,
+        selectbackground=BG_SURFACE,
+        selectforeground=ACCENT_CYAN,
+        bordercolor=BORDER_GLOW,
+        arrowcolor=ACCENT_CYAN,
+        font=FONT_INPUT)
+    style.map("Tech.TCombobox",
+        fieldbackground=[("readonly", INPUT_BG)],
+        foreground=[("readonly", ACCENT_CYAN)])
+
+    # ── Entry ──
+    style.configure("Tech.TEntry",
+        fieldbackground=INPUT_BG,
+        foreground=TEXT_PRIMARY,
+        bordercolor=BORDER_GLOW,
+        insertcolor=ACCENT_CYAN,
+        font=FONT_INPUT)
+
+    # ── Scrollbar ──
+    style.configure("Tech.Vertical.TScrollbar",
+        background=BG_SURFACE, troughcolor=BG_DARK,
+        arrowcolor=ACCENT_CYAN, bordercolor=BG_DARK)
+    style.configure("Tech.Horizontal.TScrollbar",
+        background=BG_SURFACE, troughcolor=BG_DARK,
+        arrowcolor=ACCENT_CYAN, bordercolor=BG_DARK)
+
+    # ── Treeview ──
+    style.configure("Tech.Treeview",
+        background=BG_CARD,
+        foreground=TEXT_PRIMARY,
+        fieldbackground=BG_CARD,
+        rowheight=26,
+        font=FONT_INPUT,
+        bordercolor=BORDER_GLOW)
+    style.configure("Tech.Treeview.Heading",
+        background=BG_SURFACE,
+        foreground=ACCENT_CYAN,
+        font=FONT_HEAD,
+        relief="flat",
+        bordercolor=BORDER_GLOW)
+    style.map("Tech.Treeview",
+        background=[("selected", "#1E3A5F")],
+        foreground=[("selected", ACCENT_CYAN)])
+    style.map("Tech.Treeview.Heading",
+        background=[("active", BORDER_GLOW)])
+
+    # ── Radiobutton ──
+    style.configure("Tech.TRadiobutton",
+        background=BG_SURFACE,
+        foreground=TEXT_SECONDARY,
+        font=FONT_LABEL,
+        indicatorcolor=ACCENT_CYAN)
+    style.map("Tech.TRadiobutton",
+        background=[("active", BG_SURFACE)],
+        foreground=[("active", ACCENT_CYAN)])
+
+
+def glow_label(parent, text, font=FONT_LABEL, fg=ACCENT_CYAN, bg=BG_SURFACE):
+    return Label(parent, text=text, font=font, fg=fg, bg=bg)
+
+
+def neon_button(parent, text, cmd, color=BTN_SAVE, width=16):
+    """Custom neon-effect button using Canvas."""
+    btn = Button(
+        parent, text=text, command=cmd,
+        font=FONT_BTN,
+        bg=color, fg=BG_DARK,
+        activebackground=TEXT_PRIMARY, activeforeground=BG_DARK,
+        relief="flat", bd=0,
+        cursor="hand2",
+        width=width,
+        pady=5
+    )
+    # Hover animation
+    def on_enter(e): btn.config(bg=TEXT_PRIMARY)
+    def on_leave(e): btn.config(bg=color)
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
+    return btn
+
+
+def section_frame(parent, title, x, y, w, h):
+    """Returns a styled LabelFrame with glowing title."""
+    frm = LabelFrame(
+        parent, text=f"  ◈  {title}  ",
+        font=FONT_SECTION,
+        fg=ACCENT_CYAN, bg=BG_SURFACE,
+        bd=1, relief="solid",
+        highlightbackground=BORDER_GLOW,
+        highlightthickness=1,
+        labelanchor="nw"
+    )
+    frm.place(x=x, y=y, width=w, height=h)
+    return frm
+
+
+def draw_header_canvas(parent):
+    """Draw a stylised animated header using Canvas."""
+    c = Canvas(parent, width=1530, height=120,
+               bg=BG_DARK, highlightthickness=0)
+    c.place(x=0, y=0)
+
+    # Grid lines
+    for i in range(0, 1530, 60):
+        c.create_line(i, 0, i, 120, fill="#0D1A2E", width=1)
+    for j in range(0, 120, 30):
+        c.create_line(0, j, 1530, j, fill="#0D1A2E", width=1)
+
+    # Gradient-ish glow bar at bottom
+    for i in range(6):
+        c.create_rectangle(0, 114+i//2, 1530, 120,
+                            fill=ACCENT_CYAN if i < 2 else BG_DARK,
+                            outline="")
+
+    # Side accent rectangles
+    c.create_rectangle(0, 0, 6, 120, fill=ACCENT_CYAN, outline="")
+    c.create_rectangle(1524, 0, 1530, 120, fill=ACCENT_TEAL, outline="")
+
+    # Title text
+    c.create_text(765, 38, text="◈  FACE RECOGNITION ATTENDANCE SYSTEM  ◈",
+                  font=("Courier New", 22, "bold"), fill=ACCENT_CYAN,
+                  anchor="center")
+    c.create_text(765, 72, text="[ Student Management Module ]",
+                  font=("Courier New", 12), fill=TEXT_SECONDARY,
+                  anchor="center")
+    c.create_text(765, 95, text="─────────────────────────────────────────────",
+                  font=("Courier New", 10), fill=TEXT_DIM, anchor="center")
+    return c
 
 
 class Student:
     def __init__(self, root):
         self.root = root
-        self.root.geometry("1530x790+0+0")
-        self.root.title("Face Recognition System")
-
-
-        #=====Veriables=====
-        self.var_dep=StringVar()
-        self.var_course=StringVar()
-        self.var_year=StringVar()
-        self.var_semester=StringVar()
-        self.var_std_id=StringVar()
-        self.var_std_name=StringVar()
-        self.var_div=StringVar()
-        self.var_roll=StringVar()
-        self.var_gender=StringVar()
-        self.var_dob=StringVar()
-        self.var_email=StringVar()
-        self.var_phone=StringVar()
-        self.var_address=StringVar()
-        self.var_teacher=StringVar() 
-
-
-
-        img = Image.open(r"C:\Face Recognition Attendence System\college_images\face-recognition.png")
-        img = img.resize((500, 130), Image.Resampling.LANCZOS)
-        self.photoimg = ImageTk.PhotoImage(img)
-
-        f_lbl = Label(self.root, image=self.photoimg)
-        f_lbl.place(x=0, y=0, width=500, height=130)
-
-        # Second Image
-        img1 = Image.open(r"C:\Face Recognition Attendence System\college_images\smart-attendance.jpg")
-        img1 = img1.resize((500, 130), Image.Resampling.LANCZOS)
-        self.photoimg1 = ImageTk.PhotoImage(img1)
-
-        f_lbl1 = Label(self.root, image=self.photoimg1)
-        f_lbl1.place(x=500, y=0, width=500, height=130)
-
-        # Third Image
-        img2 = Image.open(r"C:\Face Recognition Attendence System\college_images\Sudent.jpg")
-        img2 = img2.resize((530, 130), Image.Resampling.LANCZOS)
-        self.photoimg2 = ImageTk.PhotoImage(img2)
-
-        f_lbl2 = Label(self.root, image=self.photoimg2)
-        f_lbl2.place(x=1000, y=0, width=530, height=130)
-
-
-        # Background Image
-        img3 = Image.open(r"C:\Face Recognition Attendence System\college_images\wp2551980.jpg")
-        img3 = img3.resize((1530, 710), Image.Resampling.LANCZOS)
-        self.photoimg3 = ImageTk.PhotoImage(img3)
-
-        bg_img = Label(self.root, image=self.photoimg3)
-        bg_img.place(x=0, y=130, width=1530, height=710)
-
-        title_lbl = Label(bg_img, text="Student Management System",
-                          font=("times new roman", 35, "bold"), bg="white", fg="dark green")
-        title_lbl.place(x=0, y=0, width=1530, height=45)
-
-        main_frame=Frame(bg_img,bd=2,bg="white")
-        main_frame.place(x=20,y=55,width=1480,height=600)
-
-         #left lable frame
-        Left_frame=LabelFrame(main_frame,bd=2,bg="white",relief=RIDGE,text="Student Details",font=("Times New Roman",12,"bold"))
-        Left_frame.place(x=10,y=10,width=730,height=580)
-
-        img_left = Image.open(r"C:\Face Recognition Attendence System\college_images\AdobeStock.jpeg")
-        img_left = img_left.resize((720, 130), Image.Resampling.LANCZOS)
-        self.photoimg_left = ImageTk.PhotoImage(img_left)
-
-        f_lbl2 = Label(Left_frame, image=self.photoimg_left)
-        f_lbl2.place(x=5, y=0, width=720, height=130)
-
-
-        # current course  Information
-        current_course_frame=LabelFrame(Left_frame,bd=2,bg="white",relief=RIDGE,text="Current Course Information",font=("Times New Roman",12,"bold"))
-        current_course_frame.place(x=5,y=135,width=720,height=125)
-
-        #Department
-        dep_label=Label(current_course_frame,text="Department",font=("Times New Roman",12,"bold"),bg="white")
-        dep_label.grid(row=0,column=0,padx=10,sticky=W)
-
-        dep_combo=ttk.Combobox(current_course_frame,textvariable=self.var_dep,font=("Times New Roman",12,"bold"),state="read only",width=17)
-        dep_combo["values"]=("Select Department","Computer Science","Information Technology","Civil","Mechnical")
-        dep_combo.current(0)
-        dep_combo.grid(row=0,column=1,padx=2,pady=10,sticky=W)
-
-        #Course
-        course_label=Label(current_course_frame,text="Course",font=("Times New Roman",12,"bold"),bg="white")
-        course_label.grid(row=0,column=2,padx=10,sticky=W)
-
-        course_combo=ttk.Combobox(current_course_frame,textvariable=self.var_course,font=("Times New Roman",12,"bold"),state="read only",width=20)
-        course_combo["values"]=("Select Course","BE/BTech","BBA","BCA","MBA","MCA")
-        course_combo.current(0)
-        course_combo.grid(row=0,column=3,padx=2,pady=10,sticky=W)
-
-        #Year 
-        year_label=Label(current_course_frame,text="Course",font=("Times New Roman",12,"bold"),bg="white")
-        year_label.grid(row=1,column=0,padx=10,sticky=W)
-
-        year_combo=ttk.Combobox(current_course_frame,textvariable=self.var_year,font=("Times New Roman",12,"bold"),state="read only",width=17)
-        year_combo["values"]=("Select Year","First Year","Second Year","Third Year","Fourth Year")
-        year_combo.current(0)
-        year_combo.grid(row=1,column=1,padx=2,pady=10,sticky=W)
-
-        #Semester
-        semester_label=Label(current_course_frame,text="Semester",font=("Times New Roman",12,"bold"),bg="white")
-        semester_label.grid(row=1,column=2,padx=10,sticky=W)
-
-        semester_combo=ttk.Combobox(current_course_frame,textvariable=self.var_semester,font=("Times New Roman",12,"bold"),state="read only",width=20)
-        semester_combo["values"]=("Select Semester","Semester-1","Semester-2","Semester-3","Semester-4","Semester-5","Semester-6","Semester-7","Semester-8")
-        semester_combo.current(0)
-        semester_combo.grid(row=1,column=3,padx=2,pady=10,sticky=W)
-
-        # Class Student Information
-        class_Student_frame=LabelFrame(Left_frame,bd=2,bg="white",relief=RIDGE,text="Class Student Information",font=("Times New Roman",12,"bold"))
-        class_Student_frame.place(x=5,y=250,width=720,height=300)
-
-        studentId_label = Label(class_Student_frame, text="Student ID:", font=("Times New Roman", 12, "bold"), bg="white")
-        studentId_label.grid(row=0, column=0, padx=10, pady=5, sticky=W)
-
-        studentId_entry = ttk.Entry(class_Student_frame, textvariable=self.var_std_id, font=("Times New Roman", 12, "bold"), width=20)
-        studentId_entry.grid(row=0, column=1, padx=2, pady=5, sticky=W)
-
-        # Student Name
-        studentName_label = Label(class_Student_frame, text="Student Name:", font=("Times New Roman", 12, "bold"), bg="white")
-        studentName_label.grid(row=0, column=2, padx=10, pady=5, sticky=W)
-
-        studentName_entry = ttk.Entry(class_Student_frame, textvariable=self.var_std_name, font=("Times New Roman", 12, "bold"), width=20)
-        studentName_entry.grid(row=0, column=3, padx=2, pady=5, sticky=W)
-
-        # Class Divison
-        class_div_label = Label(class_Student_frame, text="Class Division:", font=("Times New Roman", 12, "bold"), bg="white")
-        class_div_label.grid(row=1, column=0, padx=10, pady=5, sticky=W)
-
-        class_div_entry = ttk.Entry(class_Student_frame, textvariable=self.var_div, font=("Times New Roman", 12, "bold"), width=20)
-        class_div_entry.grid(row=1, column=1, padx=2, pady=5, sticky=W)
-
-        # Roll No
-        roll_no_label = Label(class_Student_frame, text="Roll No:", font=("Times New Roman", 12, "bold"), bg="white")
-        roll_no_label.grid(row=1, column=2, padx=10, pady=5, sticky=W)
-
-        roll_no_entry = ttk.Entry(class_Student_frame, textvariable=self.var_roll, font=("Times New Roman", 12, "bold"), width=20)
-        roll_no_entry.grid(row=1, column=3, padx=2, pady=5, sticky=W)
-
-        # Gender
-        gender_label = Label(class_Student_frame, text="Gender:", font=("Times New Roman", 12, "bold"), bg="white")
-        gender_label.grid(row=2, column=0, padx=10, pady=5, sticky=W)
-
-        # gender_entry = ttk.Entry(class_Student_frame, textvariable=self.var_gender, font=("Times New Roman", 12, "bold"), width=20)
-        # gender_entry.grid(row=2, column=1, padx=2, pady=5, sticky=W)
-
-        gender_combo=ttk.Combobox(class_Student_frame,textvariable=self.var_gender,font=("Times New Roman",12,"bold"),state="read only",width=17)
-        gender_combo["values"]=("Male","Female","Other")
-        gender_combo.current(0)
-        gender_combo.grid(row=2,column=1,padx=2,pady=5,sticky=W)
-       
-       
-        # Date of Birth
-        dob_label = Label(class_Student_frame, text="Date of Birth:", font=("Times New Roman", 12, "bold"), bg="white")
-        dob_label.grid(row=2, column=2, padx=10, pady=5, sticky=W)
-
-        dob_entry = ttk.Entry(class_Student_frame, textvariable=self.var_dob, font=("Times New Roman", 12, "bold"), width=20)
-        dob_entry.grid(row=2, column=3, padx=2, pady=5, sticky=W)
-
-        # Email
-        email_label = Label(class_Student_frame, text="Email:", font=("Times New Roman", 12, "bold"), bg="white")
-        email_label.grid(row=3, column=0, padx=10, pady=5, sticky=W)
-
-        email_entry = ttk.Entry(class_Student_frame, textvariable=self.var_email, font=("Times New Roman", 12, "bold"), width=20)
-        email_entry.grid(row=3, column=1, padx=2, pady=5, sticky=W)
-
-        # Phone No
-        phone_label = Label(class_Student_frame, text="Phone:", font=("Times New Roman", 12, "bold"), bg="white")
-        phone_label.grid(row=3, column=2, padx=10, pady=5, sticky=W)
-
-        phone_entry = ttk.Entry(class_Student_frame, textvariable=self.var_phone, font=("Times New Roman", 12, "bold"), width=20)
-        phone_entry.grid(row=3, column=3, padx=2, pady=5, sticky=W)
-
-        # Address
-        address_label = Label(class_Student_frame, text="Address:", font=("Times New Roman", 12, "bold"), bg="white")
-        address_label.grid(row=4, column=0, padx=10, pady=5, sticky=W)
-
-        address_entry = ttk.Entry(class_Student_frame, textvariable=self.var_address, font=("Times New Roman", 12, "bold"), width=20)
-        address_entry.grid(row=4, column=1, padx=2, pady=5, sticky=W)
-
-        # Teacher Name
-        teacher_label = Label(class_Student_frame, text="Teacher:", font=("Times New Roman", 12, "bold"), bg="white")
-        teacher_label.grid(row=4, column=2, padx=10, pady=5, sticky=W)
-
-        teacher_entry = ttk.Entry(class_Student_frame, textvariable=self.var_teacher, font=("Times New Roman", 12, "bold"), width=20)
-        teacher_entry.grid(row=4, column=3, padx=2, pady=5, sticky=W)
-
-        #Radio Button
-        self.var_radio1=StringVar()
-        radiobtn1=ttk.Radiobutton(class_Student_frame,variable=self.var_radio1,text="Take photo sample",value="Yes")
-        radiobtn1.grid(row=5,column=0)
-
-        # self.var_radio2=StringVar()
-        radiobtn2=ttk.Radiobutton(class_Student_frame,variable=self.var_radio1,text="No photo sample",value="No")
-        radiobtn2.grid(row=5,column=1)
-
-        #Button Frame
-        btn_frame=Frame(class_Student_frame,bd=2,relief=RIDGE,bg="white")
-        btn_frame.place(x=0,y=200,width=715,height=35)
-
-        #Save Button
-        save_btn=Button(btn_frame,command=self.add_data,text="Save",width=19,font=("Times New Roman",12,"bold"),bg="Blue",fg="White")
-        save_btn.grid(row=0,column=0)
-
-        #Update button
-        update_btn=Button(btn_frame,command=self.update_data,text="Update",width=19,font=("Times New Roman",12,"bold"),bg="Blue",fg="White")
-        update_btn.grid(row=0,column=1) 
-        
-        #Delete button
-        delete_btn=Button(btn_frame,command=self.delete_data,text="Delete",width=19,font=("Times New Roman",12,"bold"),bg="Blue",fg="White")
-        delete_btn.grid(row=0,column=2)
-
-        #Reset Button
-        reset_btn=Button(btn_frame,command=self.reset_data,text="Reset",width=19,font=("Times New Roman",12,"bold"),bg="Blue",fg="White")
-        reset_btn.grid(row=0,column=3)
-
-        #Button Frame
-        btn1_frame=Frame(class_Student_frame,bd=2,relief=RIDGE,bg="white")
-        btn1_frame.place(x=0,y=235,width=715,height=35)
-        
-        #Take Phot Sample 
-        take_photo_btn=Button(btn1_frame,text="Take Photo",width=38,font=("Times New Roman",12,"bold"),bg="Blue",fg="White")
-        take_photo_btn.grid(row=0,column=0)
-
-        #Update Photo Sample 
-        update_photo_btn=Button(btn1_frame,command=self.generate_dataset,text="Update Photo",width=39,font=("Times New Roman",12,"bold"),bg="Blue",fg="White")
-        update_photo_btn.grid(row=0,column=1)
-
-
-
-         # Right label frame
-        RIGHT_frame = LabelFrame(main_frame, bd=2, bg="white", relief=RIDGE, text="Current Course Information", font=("Times New Roman", 12, "bold"))
-        RIGHT_frame.place(x=750, y=10, width=720, height=580)
-
-        # Loading the image
-        img_right = Image.open(r"C:\Face Recognition Attendence System\college_images\gettyimage.jpg")
-        img_right = img_right.resize((720, 130), Image.Resampling.LANCZOS)
-        self.photoimg_right = ImageTk.PhotoImage(img_right)  # Use self.photoimg_right here
-
-        # Display the image in the label
-        f_lbl2 = Label(RIGHT_frame, image=self.photoimg_right)
-        f_lbl2.place(x=5, y=0, width=720, height=130)
-
-        # =======Search System==========
-        Search_frame = LabelFrame(RIGHT_frame, bd=2, bg="white", relief=RIDGE, text="Current Course Information", font=("Times New Roman", 12, "bold"))
-        Search_frame.place(x=5, y=135, width=710, height=70)
-
-        search_label=Label(Search_frame,text="Search By:",font=("Times New Roman", 15, "bold"),bg="white",fg="black")
-        search_label.grid(row=0,column=0,padx=10,pady=5,sticky=W)
-
-        search_combo=ttk.Combobox(Search_frame,font=("Times New Roman", 13, "bold"),state="readonly",width="15")
-        search_combo["values"]=("Select","Roll_No","Phone_No")
-        search_combo.current(0)
-        search_combo.grid(row=0,column=1,padx=2,pady=10,sticky=W)
-
-        search_entry=ttk.Entry(Search_frame,width=15,font=("Times New Roman",13,"bold"))
-        search_entry.grid(row=0,column=2,padx=10,pady=5,sticky=W)
-
-        search_btn=Button(Search_frame,text="Search",width=10,font=("Times New Roman", 12, "bold"),bg="blue",fg="white")
-        search_btn.grid(row=0,column=3,padx=4)
-
-        showAll_btn=Button(Search_frame,text="Show All",width=10,font=("Times New Roman", 12, "bold"),bg="blue",fg="white")
-        showAll_btn.grid(row=0,column=4,padx=4)
-
-          #========Table Frame ===========
-        # Create the table frame
-        table_frame = Frame(RIGHT_frame, bd=2, bg="white", relief=RIDGE)
-        table_frame.place(x=5, y=210, width=710, height=250)
-
-        # Create horizontal and vertical scrollbars
-        scroll_x = ttk.Scrollbar(table_frame, orient=HORIZONTAL)
-        scroll_y = ttk.Scrollbar(table_frame, orient=VERTICAL)
-
-        # Create the Treeview
-        self.student_table = ttk.Treeview(table_frame, 
-                                        column=("dep", "course", "year", "sem", "id", "name", "dic", "roll", 
-                                                "gender", "dob", "email", "phone", "address", "teacher", "photo"), 
-                                        xscrollcommand=scroll_x.set, 
-                                        yscrollcommand=scroll_y.set)
-
-        scroll_x.pack(side=BOTTOM, fill=X)
-        scroll_y.pack(side=RIGHT, fill=Y)
-
-        # Configure the scrollbars to work with the Treeview
-        scroll_x.config(command=self.student_table.xview)
-        scroll_y.config(command=self.student_table.yview)
-
-        # Pack or grid the Treeview inside the frame
+        self.root.geometry("1530x820+0+0")
+        self.root.title("Face Recognition Attendance System")
+        self.root.config(bg=BG_DARK)
+        self.root.resizable(True, True)
+
+        apply_global_style()
+        self._init_vars()
+        self._build_ui()
+
+    # ── Variables ──────────────────────────────
+    def _init_vars(self):
+        self.var_dep      = StringVar()
+        self.var_course   = StringVar()
+        self.var_year     = StringVar()
+        self.var_semester = StringVar()
+        self.var_std_id   = StringVar()
+        self.var_std_name = StringVar()
+        self.var_div      = StringVar()
+        self.var_roll     = StringVar()
+        self.var_gender   = StringVar()
+        self.var_dob      = StringVar()
+        self.var_email    = StringVar()
+        self.var_phone    = StringVar()
+        self.var_address  = StringVar()
+        self.var_teacher  = StringVar()
+        self.var_radio1   = StringVar()
+        self.var_search   = StringVar()
+        self.var_search_by= StringVar()
+
+    # ── Main UI ────────────────────────────────
+    def _build_ui(self):
+        # Header
+        draw_header_canvas(self.root)
+
+        # Status bar
+        self.status_var = StringVar(value="◉  System Ready")
+        status = Label(self.root, textvariable=self.status_var,
+                       font=("Consolas", 9), fg=ACCENT_TEAL, bg=BG_DARK,
+                       anchor="w", padx=10)
+        status.place(x=0, y=795, width=1530, height=20)
+
+        # Main container
+        main = Frame(self.root, bg=BG_DARK)
+        main.place(x=10, y=128, width=1510, height=665)
+
+        # ── LEFT PANEL ──
+        left = LabelFrame(main,
+                          text="  ◈  STUDENT DETAILS  ",
+                          font=FONT_SECTION, fg=ACCENT_CYAN,
+                          bg=BG_SURFACE, bd=1, relief="solid",
+                          labelanchor="nw")
+        left.place(x=0, y=0, width=740, height=655)
+
+        self._build_course_section(left)
+        self._build_student_section(left)
+        self._build_buttons(left)
+
+        # ── RIGHT PANEL ──
+        right = LabelFrame(main,
+                           text="  ◈  STUDENT RECORDS  ",
+                           font=FONT_SECTION, fg=ACCENT_CYAN,
+                           bg=BG_SURFACE, bd=1, relief="solid",
+                           labelanchor="nw")
+        right.place(x=750, y=0, width=755, height=655)
+
+        self._build_search_section(right)
+        self._build_table(right)
+
+    # ── Course Info Section ─────────────────────
+    def _build_course_section(self, parent):
+        frm = LabelFrame(parent,
+                         text="  ◦  COURSE INFORMATION  ",
+                         font=("Consolas", 9, "bold"),
+                         fg=ACCENT_TEAL, bg=BG_CARD,
+                         bd=1, relief="solid", labelanchor="nw")
+        frm.place(x=8, y=8, width=722, height=115)
+
+        fields = [
+            ("Department", self.var_dep,
+             ("Select Department","Computer Science","Information Technology","Civil","Mechanical"), 0, 0),
+            ("Course", self.var_course,
+             ("Select Course","BE/BTech","BBA","BCA","MBA","MCA"), 0, 2),
+            ("Year", self.var_year,
+             ("Select Year","First Year","Second Year","Third Year","Fourth Year"), 1, 0),
+            ("Semester", self.var_semester,
+             ("Select Semester","Semester-1","Semester-2","Semester-3","Semester-4",
+              "Semester-5","Semester-6","Semester-7","Semester-8"), 1, 2),
+        ]
+
+        for label_text, var, values, row, col in fields:
+            lbl = Label(frm, text=label_text, font=FONT_LABEL,
+                        fg=TEXT_SECONDARY, bg=BG_CARD, anchor="w")
+            lbl.grid(row=row, column=col, padx=(12, 4), pady=8, sticky=W)
+            cb = ttk.Combobox(frm, textvariable=var,
+                              font=FONT_INPUT, state="readonly",
+                              width=20, style="Tech.TCombobox")
+            cb["values"] = values
+            cb.current(0)
+            cb.grid(row=row, column=col+1, padx=(0, 15), pady=8, sticky=W)
+
+    # ── Student Info Section ────────────────────
+    def _build_student_section(self, parent):
+        frm = LabelFrame(parent,
+                         text="  ◦  CLASS & PERSONAL INFORMATION  ",
+                         font=("Consolas", 9, "bold"),
+                         fg=ACCENT_TEAL, bg=BG_CARD,
+                         bd=1, relief="solid", labelanchor="nw")
+        frm.place(x=8, y=132, width=722, height=370)
+
+        rows = [
+            ("Student ID",    self.var_std_id,   None,    0, 0),
+            ("Student Name",  self.var_std_name,  None,   0, 2),
+            ("Class Division",self.var_div,        None,   1, 0),
+            ("Roll No",       self.var_roll,       None,   1, 2),
+            ("Gender",        self.var_gender,
+             ("Male","Female","Other"),                    2, 0),
+            ("Date of Birth", self.var_dob,        None,   2, 2),
+            ("Email",         self.var_email,      None,   3, 0),
+            ("Phone",         self.var_phone,      None,   3, 2),
+            ("Address",       self.var_address,    None,   4, 0),
+            ("Teacher",       self.var_teacher,    None,   4, 2),
+        ]
+
+        for label_text, var, values, row, col in rows:
+            dot_color = ACCENT_CYAN if col == 0 else ACCENT_TEAL
+            dot = Label(frm, text="▸", font=("Consolas", 10), fg=dot_color, bg=BG_CARD)
+            dot.grid(row=row, column=col, padx=(8, 0), pady=10, sticky=E)
+
+            lbl = Label(frm, text=label_text, font=FONT_LABEL,
+                        fg=TEXT_SECONDARY, bg=BG_CARD, anchor="w", width=13)
+            lbl.grid(row=row, column=col+1, padx=(0, 4), pady=10, sticky=W)
+
+            if values:
+                cb = ttk.Combobox(frm, textvariable=var,
+                                  font=FONT_INPUT, state="readonly",
+                                  width=18, style="Tech.TCombobox")
+                cb["values"] = values
+                cb.current(0)
+                cb.grid(row=row, column=col+2, padx=(0, 10), pady=10, sticky=W)
+            else:
+                ent = ttk.Entry(frm, textvariable=var,
+                                font=FONT_INPUT, width=20,
+                                style="Tech.TEntry")
+                ent.grid(row=row, column=col+2, padx=(0, 10), pady=10, sticky=W)
+
+        # Separator line
+        sep = Frame(frm, bg=BORDER_GLOW, height=1)
+        sep.grid(row=5, column=0, columnspan=6, sticky="ew", padx=8, pady=4)
+
+        # Photo sample radio buttons
+        radio_frame = Frame(frm, bg=BG_CARD)
+        radio_frame.grid(row=6, column=0, columnspan=6, padx=10, pady=8, sticky=W)
+
+        Label(radio_frame, text="Photo Sample:", font=FONT_LABEL,
+              fg=TEXT_SECONDARY, bg=BG_CARD).pack(side=LEFT, padx=(0, 12))
+
+        r1 = ttk.Radiobutton(radio_frame, variable=self.var_radio1,
+                             text="◉  Capture Photo", value="Yes",
+                             style="Tech.TRadiobutton")
+        r1.pack(side=LEFT, padx=(0, 20))
+
+        r2 = ttk.Radiobutton(radio_frame, variable=self.var_radio1,
+                             text="◎  No Photo", value="No",
+                             style="Tech.TRadiobutton")
+        r2.pack(side=LEFT)
+
+    # ── Button Row ──────────────────────────────
+    def _build_buttons(self, parent):
+        # Action buttons row
+        btn_row1 = Frame(parent, bg=BG_DARK, bd=0)
+        btn_row1.place(x=8, y=510, width=722, height=44)
+
+        btns1 = [
+            ("💾  SAVE",   self.add_data,    BTN_SAVE,   15),
+            ("✏  UPDATE", self.update_data,  BTN_UPDATE, 15),
+            ("🗑  DELETE", self.delete_data,  BTN_DELETE, 15),
+            ("↺  RESET",  self.reset_data,   BTN_RESET,  15),
+        ]
+        for text, cmd, color, w in btns1:
+            b = neon_button(btn_row1, text, cmd, color=color, width=w)
+            b.pack(side=LEFT, padx=2, expand=True, fill=X)
+
+        # Photo buttons row
+        btn_row2 = Frame(parent, bg=BG_DARK, bd=0)
+        btn_row2.place(x=8, y=560, width=722, height=44)
+
+        b3 = neon_button(btn_row2, "📷  TAKE PHOTO SAMPLE",
+                         self.take_photo, color="#0EA5E9", width=30)
+        b3.pack(side=LEFT, padx=2, expand=True, fill=X)
+
+        b4 = neon_button(btn_row2, "🔄  GENERATE / UPDATE DATASET",
+                         self.generate_dataset, color=ACCENT_PURPLE, width=30)
+        b4.pack(side=LEFT, padx=2, expand=True, fill=X)
+
+    # ── Search Section ──────────────────────────
+    def _build_search_section(self, parent):
+        frm = LabelFrame(parent,
+                         text="  ◦  SEARCH  ",
+                         font=("Consolas", 9, "bold"),
+                         fg=ACCENT_TEAL, bg=BG_CARD,
+                         bd=1, relief="solid", labelanchor="nw")
+        frm.place(x=8, y=8, width=737, height=70)
+
+        Label(frm, text="Search By:", font=FONT_LABEL,
+              fg=TEXT_SECONDARY, bg=BG_CARD).grid(row=0, column=0, padx=10, pady=12, sticky=W)
+
+        cb = ttk.Combobox(frm, textvariable=self.var_search_by,
+                          font=FONT_INPUT, state="readonly",
+                          width=14, style="Tech.TCombobox")
+        cb["values"] = ("Select", "Roll_No", "Phone_No")
+        cb.current(0)
+        cb.grid(row=0, column=1, padx=6, pady=12, sticky=W)
+
+        ent = ttk.Entry(frm, textvariable=self.var_search,
+                        font=FONT_INPUT, width=18, style="Tech.TEntry")
+        ent.grid(row=0, column=2, padx=6, pady=12, sticky=W)
+
+        sb = neon_button(frm, "🔍 Search",
+                         lambda: None, color=ACCENT_CYAN, width=10)
+        sb.grid(row=0, column=3, padx=6, pady=8)
+
+        ab = neon_button(frm, "⊞  All",
+                         self.fetch_data, color=ACCENT_TEAL, width=8)
+        ab.grid(row=0, column=4, padx=6, pady=8)
+
+    # ── Data Table ──────────────────────────────
+    def _build_table(self, parent):
+        frm = Frame(parent, bg=BG_CARD, bd=1, relief="solid")
+        frm.place(x=8, y=88, width=737, height=555)
+
+        cols = ("dep","course","year","sem","id","name",
+                "div","roll","gender","dob","email","phone",
+                "address","teacher","photo")
+
+        scx = ttk.Scrollbar(frm, orient=HORIZONTAL, style="Tech.Horizontal.TScrollbar")
+        scy = ttk.Scrollbar(frm, orient=VERTICAL,   style="Tech.Vertical.TScrollbar")
+
+        self.student_table = ttk.Treeview(
+            frm, columns=cols, show="headings",
+            xscrollcommand=scx.set, yscrollcommand=scy.set,
+            style="Tech.Treeview")
+
+        scx.pack(side=BOTTOM, fill=X)
+        scy.pack(side=RIGHT,  fill=Y)
+        scx.config(command=self.student_table.xview)
+        scy.config(command=self.student_table.yview)
         self.student_table.pack(fill=BOTH, expand=1)
 
-        # Set the headings (optional)
-        self.student_table.heading("dep", text="Department")
-        self.student_table.heading("course", text="Course")
-        self.student_table.heading("year", text="Year")
-        self.student_table.heading("sem", text="Semester")
-        self.student_table.heading("id", text="Student ID")
-        self.student_table.heading("name", text="Name")
-        self.student_table.heading("dic", text="Date of Issue")
-        self.student_table.heading("roll", text="Roll No")
-        self.student_table.heading("gender", text="Gender")
-        self.student_table.heading("dob", text="Date of Birth")
-        self.student_table.heading("email", text="Email")
-        self.student_table.heading("phone", text="Phone No")
-        self.student_table.heading("address", text="Address")
-        self.student_table.heading("teacher", text="Teacher")
-        self.student_table.heading("photo", text="Photo Status")
+        headers = {
+            "dep":"Department","course":"Course","year":"Year","sem":"Semester",
+            "id":"Student ID","name":"Name","div":"Division","roll":"Roll No",
+            "gender":"Gender","dob":"Date of Birth","email":"Email",
+            "phone":"Phone","address":"Address","teacher":"Teacher","photo":"Photo"
+        }
+        for col, head in headers.items():
+            self.student_table.heading(col, text=head)
+            self.student_table.column(col, width=100, minwidth=80)
 
-        # Configure the column widths (optional)
-        self.student_table.column("dep", width=100)
-        self.student_table.column("course", width=100)
-        self.student_table.column("year", width=100)
-        self.student_table.column("sem", width=100)
-        self.student_table.column("id", width=100)
-        self.student_table.column("name", width=100)
-        self.student_table.column("dic", width=100)
-        self.student_table.column("roll", width=100)
-        self.student_table.column("gender", width=100)
-        self.student_table.column("dob", width=100)
-        self.student_table.column("email", width=100)
-        self.student_table.column("phone", width=100)
-        self.student_table.column("address", width=100)
-        self.student_table.column("teacher", width=100)
-        self.student_table.column("photo", width=100)
+        # Alternating row tags
+        self.student_table.tag_configure("odd",  background="#0F1A2E")
+        self.student_table.tag_configure("even", background=BG_CARD)
 
-        # Set the table to display columns and data
-        self.student_table["show"] = "headings  "
-        self.student_table.bind("<ButtonRelease>",self.get_cursor)
+        self.student_table.bind("<ButtonRelease-1>", self.get_cursor)
         self.fetch_data()
 
-    # ======function declartion===============
+    # ────────────────────────────────────────────
+    #  DATA FUNCTIONS
+    # ────────────────────────────────────────────
+    def _set_status(self, msg, color=ACCENT_TEAL):
+        self.status_var.set(f"◉  {msg}")
+
     def add_data(self):
-        if self.var_dep.get()=="Select Department" or self.var_std_name.get()=="" or self.var_std_id.get()=="":
-            messagebox.showerror("Error","All Fileds are required",parent=self.root)
-        else:
-            try:
-                conn=mysql.connector.connect(host="localhost",username="root",password="mysql",database="face_recognizer")
-                my_cursor=conn.cursor()
-                my_cursor.execute("insert into student values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",(
-
-                                                                                            self.var_dep.get(),
-                                                                                            self.var_course.get(),
-                                                                                            self.var_year.get(),
-                                                                                            self.var_semester.get(),
-                                                                                            self.var_std_id.get(),
-                                                                                            self.var_std_name.get(),
-                                                                                            self.var_div.get(),
-                                                                                            self.var_roll.get(),
-                                                                                            self.var_gender.get(),
-                                                                                            self.var_dob.get(),
-                                                                                            self.var_email.get(),
-                                                                                            self.var_phone.get(),
-                                                                                            self.var_address.get(),
-                                                                                            self.var_teacher.get(),
-                                                                                            # self.var_PhotoSample.get(),
-                                                                                            self.var_radio1.get()
-
-                                                                                            ))
-                conn.commit()
-                self.fetch_data()
-                conn.close()
-                messagebox.showinfo("SUCCESS","Student Detail has been added Successfully", parent=self.root)
-            except Exception as es:
-                messagebox.showerror("ERROR",f"Due To :{str(es)}",parent=self.root)
-
-
-
-        #===================fetch Data=====================
-    def fetch_data(self):
-        conn=mysql.connector.connect(host="localhost",username="root",password="mysql",database="face_recognizer")
-        my_cursor=conn.cursor()
-        my_cursor.execute("Select * from student")
-        data=my_cursor.fetchall()
-
-        if len(data)!=0:
-            self.student_table.delete(*self.student_table.get_children())
-            for i in data:
-                self.student_table.insert("",END,values=i)
-            conn.commit()
-        conn.close()
-
-# ======get curser============
-    def get_cursor(self,event=""):
-        cursor_focus=self.student_table.focus()
-        content=self.student_table.item(cursor_focus)
-        data=content["values"]
-
-
-        self.var_dep.set(data[0]),
-        self.var_year.set(data[1]),
-        self.var_course.set(data[2]),
-        self.var_semester.set(data[3]),
-        self.var_std_id.set(data[4]),
-        self.var_std_name.set(data[5]),
-        self.var_div.set(data[6]),
-        self.var_roll.set(data[7]),
-        self.var_gender.set(data[8]),
-        self.var_dob.set(data[9]),
-        self.var_email.set(data[10]),
-        self.var_phone.set(data[11]),
-        self.var_address.set(data[12]),
-        self.var_teacher.set(data[13]),
-        self.var_radio1.set(data[14])
-
-# ==============Update Functon==========
-    # def update_data(self):
-    #     if self.var_dep.get()=="Select Department" or self.var_std_name.get()=="" or self.var_std_id.get()=="":
-    #         messagebox.showerror("Error","All Fileds are required",parent=self.root)
-    #     else:
-    #         try:
-    #             Update=messagebox.askyesno("Update","Do you wnat to update the student details",parent=self.root)
-    #             if Update>0:
-    #                 conn=mysql.connector.connect(host="localhost",username="root",password="mysql",database="face_recognizer")
-    #                 my_cursor=conn.cursor()
-    #                 my_cursor.execute("update student set Dep=%s,cousre=%s,Year=%s,Semester=%s,Name=%s,Divison=%s,Roll=%s,Gender=%s,Dob=%s,Email=%s,Phone=%s,Address=%s,Teacher=%s,PhotoSample=%s where Student_id=%s",(
-    #                                                                                                                                                                                        self.var_dep.get(),
-    #                                                                                                                                                                                        self.var_course.get(),
-    #                                                                                                                                                                                        self.var_year.get(),
-    #                                                                                                                                                                                        self.var_semester.get(),
-    #                                                                                                                                                                                        self.var_std_name.get(),
-    #                                                                                                                                                                                        self.var_div.get(),
-    #                                                                                                                                                                                        self.var_roll.get(),
-    #                                                                                                                                                                                        self.var_gender.get(),
-    #                                                                                                                                                                                        self.var_dob.get(),
-    #                                                                                                                                                                                        self.var_email.get(),
-    #                                                                                                                                                                                        self.var_phone.get(),
-    #                                                                                                                                                                                        self.var_address.get(),
-    #                                                                                                                                                                                        self.var_teacher.get(),
-    #                                                                                                                                                                                         # self.var_PhotoSample.get(),
-    #                                                                                                                                                                                        self.var_radio1.get(),
-    #                                                                                                                                                                                        self.var_std_id.get()
-    #                                                                                                                                                                                     ))
-    #             else:
-    #                 if  not Update:
-    #                     return
-    #             messagebox.showinfo("Success","Student Detail Successfully Upadated.",parent=self.root)
-    #             conn.commit()
-    #             self.fetch_data()
-    #             conn.close()           
-    #         except Exception as es:
-    #             messagebox.showerror("Error",f"Due to :{str(es)}",parent=self.root)
-    def update_data(self):
-        if self.var_dep.get() == "Select Department" or self.var_std_name.get() == "" or self.var_std_id.get() == "":
-            messagebox.showerror("Error", "All fields are required", parent=self.root)
+        if self.var_dep.get() == "Select Department" or not self.var_std_name.get() or not self.var_std_id.get():
+            messagebox.showerror("Error", "All Fields are required", parent=self.root)
             return
-
         try:
-            # Confirm if the user wants to update the details
-            is_update = messagebox.askyesno("Update", "Do you want to update the student details?", parent=self.root)
-            if is_update:
-                # Connect to the database
-                conn = mysql.connector.connect(
-                    host="localhost",
-                    username="root",
-                    password="mysql",
-                    database="face_recognizer"
-                )
-                my_cursor = conn.cursor()
-                
-                # Execute the update query
-                my_cursor.execute("""
-                    UPDATE student SET 
-                    Dep=%s, Course=%s, Year=%s, Semester=%s, Name=%s, Division=%s, Roll=%s, 
-                    Gender=%s, Dob=%s, Email=%s, Phone=%s, Address=%s, Teacher=%s, PhotoSample=%s 
-                    WHERE Student_id=%s
-                """, (
-                    self.var_dep.get(),
-                    self.var_course.get(),
-                    self.var_year.get(),
-                    self.var_semester.get(),
-                    self.var_std_name.get(),
-                    self.var_div.get(),
-                    self.var_roll.get(),
-                    self.var_gender.get(),
-                    self.var_dob.get(),
-                    self.var_email.get(),
-                    self.var_phone.get(),
-                    self.var_address.get(),
-                    self.var_teacher.get(),
-                    self.var_radio1.get(),  # Ensure this correctly corresponds to PhotoSample
-                    self.var_std_id.get()
-                ))
-                
-                # Commit the changes and close the connection
-                conn.commit()
-                conn.close()
-                
-                # Notify the user and refresh the data
-                messagebox.showinfo("Success", "Student details successfully updated.", parent=self.root)
-                self.fetch_data()
-            else:
-                return
-        except Exception as e:
-            messagebox.showerror("Error", f"Due to: {str(e)}", parent=self.root)
-
-    # Delete button
-    def delete_data(self):
-        if self.var_std_id.get()=="":
-            messagebox.showerror("Error","Student Id must be required",parent=self.root)
-        else:
-            try:
-                 delete = messagebox.askyesno("Student Delete Page", "Do you want to delete the student details?", parent=self.root)
-                 if delete>0:
-                    conn = mysql.connector.connect(host="localhost", username="root", password="mysql", database="face_recognizer")
-                    my_cursor = conn.cursor()
-                    sql="delete from student where Student_id=%s"
-                    val=(self.var_std_id.get(),)
-                    my_cursor.execute(sql,val)
-                 else:
-                    if not delete:
-                        return
-
-                 conn.commit()
-                 self.fetch_data()
-                 conn.close()
-                 messagebox.showinfo("Delete","Successfully deleted student detail",parent =self.root)
-            except Exception as es:
-               messagebox.showerror("Error", f"Due to: {str(es)}", parent=self.root)
-    # Reset function
-    def reset_data(self):
-        self.var_dep.set("Select Department"),
-        self.var_year.set("Select year"),
-        self.var_course.set("Select Course"),
-        self.var_semester.set("Select Semester"),
-        self.var_std_id.set(""),
-        self.var_std_name.set(""),
-        self.var_div.set("Select Divison"),
-        self.var_roll.set(""),
-        self.var_gender.set("Male"),
-        self.var_dob.set(""),
-        self.var_email.set(""),
-        self.var_phone.set(""),
-        self.var_address.set(""),
-        self.var_teacher.set(""),
-        self.var_radio1.set("")
-# =======Genrate photo sample ============
-
-
-    def generate_dataset(self):
-    # Check if required fields are filled
-     if self.var_dep.get() == "Select Department" or self.var_std_name.get() == "" or self.var_std_id.get() == "":
-        messagebox.showerror("Error", "All Fields are required", parent=self.root)
-     else:
-        try:
-            # Connect to the database
-            conn = mysql.connector.connect(
-                host="localhost",
-                username="root",
-                password="mysql",
-                database="face_recognizer"
-            )
-            my_cursor = conn.cursor()
-            
-            # Get current students to find the next id
-            my_cursor.execute("SELECT * FROM student")
-            myresult = my_cursor.fetchall()
-            id = 0
-            for x in myresult:
-                id += 1
-
-            # Update the student's information
-            my_cursor.execute("""
-                UPDATE student SET 
-                    Dep=%s, Course=%s, Year=%s, Semester=%s, Name=%s, Division=%s, 
-                    Roll=%s, Gender=%s, Dob=%s, Email=%s, Phone=%s, Address=%s, 
-                    Teacher=%s, PhotoSample=%s 
-                WHERE Student_id=%s
-                """, (
-                    self.var_dep.get(),
-                    self.var_course.get(),
-                    self.var_year.get(),
-                    self.var_semester.get(),
-                    self.var_std_name.get(),
-                    self.var_div.get(),
-                    self.var_roll.get(),
-                    self.var_gender.get(),
-                    self.var_dob.get(),
-                    self.var_email.get(),
-                    self.var_phone.get(),
-                    self.var_address.get(),
-                    self.var_teacher.get(),
-                    self.var_radio1.get(),  # PhotoSample field value
-                    self.var_std_id.get()  # ID of the student being updated
-                )
-            )
-            conn.commit()
+            conn = mysql.connector.connect(host="localhost", user="root",
+                                           password="7700", database="face_recognizer")
+            cur = conn.cursor()
+            cur.execute("INSERT INTO student VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (self.var_dep.get(), self.var_course.get(), self.var_year.get(),
+                         self.var_semester.get(), self.var_std_id.get(), self.var_std_name.get(),
+                         self.var_div.get(), self.var_roll.get(), self.var_gender.get(),
+                         self.var_dob.get(), self.var_email.get(), self.var_phone.get(),
+                         self.var_address.get(), self.var_teacher.get(), self.var_radio1.get()))
+            conn.commit(); conn.close()
             self.fetch_data()
-            self.reset_data()
-            conn.close()
+            self._set_status(f"Student '{self.var_std_name.get()}' added successfully.")
+            messagebox.showinfo("SUCCESS", "Student detail added successfully", parent=self.root)
+        except Exception as e:
+            messagebox.showerror("ERROR", f"Due to: {e}", parent=self.root)
 
-            # ==== Load predefined face classifier ====
+    def fetch_data(self):
+        try:
+            conn = mysql.connector.connect(host="localhost", user="root",
+                                           password="7700", database="face_recognizer")
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM student")
+            rows = cur.fetchall()
+            self.student_table.delete(*self.student_table.get_children())
+            for i, row in enumerate(rows):
+                tag = "odd" if i % 2 else "even"
+                self.student_table.insert("", END, values=row, tags=(tag,))
+            conn.commit(); conn.close()
+            self._set_status(f"{len(rows)} records loaded.")
+        except Exception as e:
+            self._set_status(f"DB Error: {e}", ERROR_RED)
+
+    def get_cursor(self, event=""):
+        try:
+            item = self.student_table.focus()
+            data = self.student_table.item(item)["values"]
+            if not data: return
+            self.var_dep.set(data[0]);  self.var_year.set(data[1])
+            self.var_course.set(data[2]); self.var_semester.set(data[3])
+            self.var_std_id.set(data[4]); self.var_std_name.set(data[5])
+            self.var_div.set(data[6]);   self.var_roll.set(data[7])
+            self.var_gender.set(data[8]); self.var_dob.set(data[9])
+            self.var_email.set(data[10]); self.var_phone.set(data[11])
+            self.var_address.set(data[12]); self.var_teacher.set(data[13])
+            self.var_radio1.set(data[14])
+        except Exception: pass
+
+    def update_data(self):
+        if not self.var_std_id.get():
+            messagebox.showerror("Error", "Select a student first", parent=self.root); return
+        if messagebox.askyesno("Update", "Update student details?", parent=self.root):
+            try:
+                conn = mysql.connector.connect(host="localhost", user="root",
+                                               password="7700", database="face_recognizer")
+                cur = conn.cursor()
+                cur.execute("""UPDATE student SET Dep=%s,Course=%s,Year=%s,Semester=%s,
+                    Name=%s,Division=%s,Roll=%s,Gender=%s,Dob=%s,Email=%s,
+                    Phone=%s,Address=%s,Teacher=%s,PhotoSample=%s WHERE Student_id=%s""",
+                    (self.var_dep.get(), self.var_course.get(), self.var_year.get(),
+                     self.var_semester.get(), self.var_std_name.get(), self.var_div.get(),
+                     self.var_roll.get(), self.var_gender.get(), self.var_dob.get(),
+                     self.var_email.get(), self.var_phone.get(), self.var_address.get(),
+                     self.var_teacher.get(), self.var_radio1.get(), self.var_std_id.get()))
+                conn.commit(); conn.close()
+                self.fetch_data()
+                self._set_status("Student record updated.")
+                messagebox.showinfo("Success", "Student details updated.", parent=self.root)
+            except Exception as e:
+                messagebox.showerror("Error", f"Due to: {e}", parent=self.root)
+
+    def delete_data(self):
+        if not self.var_std_id.get():
+            messagebox.showerror("Error", "Student ID required", parent=self.root); return
+        if messagebox.askyesno("Delete", "Delete this student?", parent=self.root):
+            try:
+                conn = mysql.connector.connect(host="localhost", user="root",
+                                               password="7700", database="face_recognizer")
+                cur = conn.cursor()
+                cur.execute("DELETE FROM student WHERE Student_id=%s", (self.var_std_id.get(),))
+                conn.commit(); conn.close()
+                self.fetch_data(); self.reset_data()
+                self._set_status("Student record deleted.")
+                messagebox.showinfo("Delete", "Student deleted successfully", parent=self.root)
+            except Exception as e:
+                messagebox.showerror("Error", f"Due to: {e}", parent=self.root)
+
+    def reset_data(self):
+        self.var_dep.set("Select Department"); self.var_year.set("Select Year")
+        self.var_course.set("Select Course"); self.var_semester.set("Select Semester")
+        self.var_std_id.set(""); self.var_std_name.set("")
+        self.var_div.set(""); self.var_roll.set("")
+        self.var_gender.set("Male"); self.var_dob.set("")
+        self.var_email.set(""); self.var_phone.set("")
+        self.var_address.set(""); self.var_teacher.set("")
+        self.var_radio1.set("")
+        self._set_status("Form reset.")
+
+    def take_photo(self):
+        if self.var_dep.get() == "Select Department" or not self.var_std_name.get() or not self.var_std_id.get():
+            messagebox.showerror("Error", "Fill Department, Student ID and Name before capturing photos", parent=self.root)
+            return
+        try:
+            # Get numeric ID for file naming from DB row count
+            conn = mysql.connector.connect(host="localhost", user="root",
+                                           password="7700", database="face_recognizer")
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM student")
+            result = cur.fetchone()
+            conn.close()
+            img_id_base = result[0] if result else 0
+
             face_classifier = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
-            # Function to detect and crop face
             def face_cropped(img):
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 faces = face_classifier.detectMultiScale(gray, 1.3, 5)
                 for (x, y, w, h) in faces:
-                    face_cropped = img[y:y+h, x:x+w]
-                    return face_cropped
-                return None  # If no face is detected
+                    return img[y:y+h, x:x+w]
+                return None
 
-            # Open video capture
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                messagebox.showerror("Camera Error", "Could not open webcam. Check if it is connected.", parent=self.root)
+                return
+
+            img_count = 0
+            self._set_status("Camera open — capturing face samples... Press ENTER or capture 100 images to stop.")
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    messagebox.showerror("Error", "Failed to read from camera.", parent=self.root)
+                    break
+
+                cropped = face_cropped(frame)
+                if cropped is not None:
+                    img_count += 1
+                    face = cv2.resize(cropped, (450, 450))
+                    face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+
+                    import os
+                    os.makedirs("data", exist_ok=True)
+                    file_path = f"data/user.{img_id_base}.{img_count}.jpg"
+                    cv2.imwrite(file_path, face)
+
+                    # Draw counter on preview
+                    preview = face.copy()
+                    cv2.putText(preview, f"Captured: {img_count}/100", (10, 40),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                    cv2.putText(preview, f"ID: {self.var_std_id.get()}", (10, 90),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
+                    cv2.imshow(f"Capturing — {self.var_std_name.get()}", preview)
+                else:
+                    # Show live feed even when no face detected
+                    cv2.putText(frame, "No face detected", (20, 40),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    cv2.imshow(f"Capturing — {self.var_std_name.get()}", frame)
+
+                # Stop on Enter key or after 100 images
+                if cv2.waitKey(1) == 13 or img_count >= 100:
+                    break
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+            if img_count > 0:
+                self._set_status(f"Photo capture complete — {img_count} images saved for {self.var_std_name.get()}.")
+                messagebox.showinfo("Done",
+                    f"Successfully captured {img_count} photo samples!\n\nSaved to: data/user.{img_id_base}.*.jpg\n\nNow click 'Generate Dataset' to train the model.",
+                    parent=self.root)
+            else:
+                self._set_status("No photos captured — no face was detected.")
+                messagebox.showwarning("No Face Detected",
+                    "Camera ran but no face was detected.\n\nTips:\n• Make sure your face is well-lit\n• Sit closer to the camera\n• Check haarcascade_frontalface_default.xml is in the project folder",
+                    parent=self.root)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Due to: {e}", parent=self.root)
+
+    def generate_dataset(self):
+        if self.var_dep.get() == "Select Department" or not self.var_std_name.get() or not self.var_std_id.get():
+            messagebox.showerror("Error", "All Fields are required", parent=self.root); return
+        try:
+            conn = mysql.connector.connect(host="localhost", user="root",
+                                           password="7700", database="face_recognizer")
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM student")
+            rows = cur.fetchall()
+            id_ = len(rows)
+            cur.execute("""UPDATE student SET Dep=%s,Course=%s,Year=%s,Semester=%s,Name=%s,
+                Division=%s,Roll=%s,Gender=%s,Dob=%s,Email=%s,Phone=%s,Address=%s,
+                Teacher=%s,PhotoSample=%s WHERE Student_id=%s""",
+                (self.var_dep.get(), self.var_course.get(), self.var_year.get(),
+                 self.var_semester.get(), self.var_std_name.get(), self.var_div.get(),
+                 self.var_roll.get(), self.var_gender.get(), self.var_dob.get(),
+                 self.var_email.get(), self.var_phone.get(), self.var_address.get(),
+                 self.var_teacher.get(), self.var_radio1.get(), self.var_std_id.get()))
+            conn.commit(); conn.close()
+            self.fetch_data(); self.reset_data()
+
+            face_classifier = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+
+            def face_cropped(img):
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                faces = face_classifier.detectMultiScale(gray, 1.3, 5)
+                for (x, y, w, h) in faces:
+                    return img[y:y+h, x:x+w]
+                return None
+
             cap = cv2.VideoCapture(0)
             img_id = 0
             while True:
-                ret, my_frame = cap.read()
-                if not ret:
-                    messagebox.showerror("Error", "Failed to open camera", parent=self.root)
-                    break
-
-                # Detect and process face
-                cropped_face = face_cropped(my_frame)
-                if cropped_face is not None:
+                ret, frame = cap.read()
+                if not ret: break
+                cropped = face_cropped(frame)
+                if cropped is not None:
                     img_id += 1
-                    face = cv2.resize(cropped_face, (450, 450))
+                    face = cv2.resize(cropped, (450, 450))
                     face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-                    
-                    # Save the face image
-                    file_name_path = f"data/user.{str(id)}.{str(img_id)}.jpg"
-                    cv2.imwrite(file_name_path, face)
-                    
-                    # Display the face with image count
-                    cv2.putText(face, str(img_id), (50, 50), cv2.FONT_HERSHEY_COMPLEX, 2, (0, 255, 0), 2)
-                    cv2.imshow("Cropped Face", face)
+                    cv2.imwrite(f"data/user.{id_}.{img_id}.jpg", face)
+                    cv2.putText(face, str(img_id), (50, 50),
+                                cv2.FONT_HERSHEY_COMPLEX, 2, (0, 255, 0), 2)
+                    cv2.imshow("Capturing Face Samples", face)
+                if cv2.waitKey(1) == 13 or img_id == 200: break
+            cap.release(); cv2.destroyAllWindows()
+            self._set_status(f"Dataset generated: {img_id} images captured.")
+            messagebox.showinfo("Done", "Face dataset generation complete!", parent=self.root)
+        except Exception as e:
+            messagebox.showerror("Error", f"Due to: {e}", parent=self.root)
 
-                # Break when 100 images are captured or 'Enter' key is pressed
-                if cv2.waitKey(1) == 13 or img_id == 100:
-                    break
-            
-            # Release resources and close windows
-            cap.release()
-            cv2.destroyAllWindows()
-            messagebox.showinfo("Result", "Generating dataset completed!")
-
-        except Exception as es:
-            messagebox.showerror("Error", f"Due to: {str(es)}", parent=self.root)
-    # def genrate_dataset(self):
-    #     if self.var_dep.get() == "Select Department" or self.var_std_name.get() == "" or self.var_std_id.get() == "":
-    #         messagebox.showerror("Error", "All Fields are required", parent=self.root)
-    #     else:
-    #         try:
-    #             conn = mysql.connector.connect(host="localhost", username="root", password="mysql", database="face_recognizer")
-    #             my_cursor = conn.cursor()
-    #             my_cursor.execute("Select * from student")
-    #             myresult=my_cursor.fetchall()
-    #             id=0
-    #             for x in myresult:
-    #                 id+=1
-    #             my_cursor.execute("""
-    #                     UPDATE student SET 
-    #                     Dep=%s, Course=%s, Year=%s, Semester=%s, Name=%s, Division=%s, Roll=%s, 
-    #                     Gender=%s, Dob=%s, Email=%s, Phone=%s, Address=%s, Teacher=%s, PhotoSample=%s 
-    #                     WHERE Student_id=%s
-    #                 """, (
-    #                     self.var_dep.get(),
-    #                     self.var_course.get(),
-    #                     self.var_year.get(),
-    #                     self.var_semester.get(),
-    #                     self.var_std_name.get(),
-    #                     self.var_div.get(),
-    #                     self.var_roll.get(),
-    #                     self.var_gender.get(),
-    #                     self.var_dob.get(),
-    #                     self.var_email.get(),
-    #                     self.var_phone.get(),
-    #                     self.var_address.get(),
-    #                     self.var_teacher.get(),
-    #                     self.var_radio1.get(),  # Make sure this is correct for PhotoSample
-    #                     self.var_std_id.get()==id+1 
-    #                 ))
-    #             conn.commit()
-    #             self.fetch_data()
-    #             self.reset_data()
-    #             conn.close()   
-
-    #             # ====Load predefined data on face frontal from openc====
-    #             face_classifier=cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-
-    #             def face_cropped(img):
-    #                 gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    #                 faces=face_classifier.detectMultiScale(gray,1.3,5)
-    #                 # Scaling factor=1,3
-    #                 # Minimum neighbour=5
-
-    #                 for(x,y,w,h) in faces:
-    #                     face_cropped=img[y:y+h,x:x+w]
-    #                     return face_cropped
-                    
-
-    #             cap=cv2.VideoCapture(0)
-    #             img_id=0
-    #             while True:
-    #                 ret,my_frame_=cap.read()
-    #                 if face_cropped(my_frame) is not None:
-    #                     img_id+=1
-    #                     face=cv2.resize(face_cropped(my_frame),(450,450))
-    #                     face=cv2.cvtColor(face,cv2.COLOR_BGR2GRAY)
-    #                     file_name_path="data/user."+str(id)+"."+str(img_id)+".jpg"
-    #                     cv2.imwrite(file_name_path,face)
-    #                     cv2.putText(face,str(img_id),(50,50),cv2.FONT_HERSHEY_COMPLEX,2,(0,255,0),2)
-    #                     cv2.imshow("Cropped Face ",face)
-
-    #                 if cv2.waitKey(1)==13 or int(img_id)==100:
-    #                     break
-    #             cap.release()
-    #             cv2.destroyAllWindows()
-    #             messagebox.showinfo("Result","Genrating dataset completed!!!!")
-    #         except Exception as es:
-    #            messagebox.showerror("Error", f"Due to: {str(es)}", parent=self.root)
 
 if __name__ == "__main__":
     root = Tk()
     obj = Student(root)
     root.mainloop()
-      
